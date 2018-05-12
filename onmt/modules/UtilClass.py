@@ -32,9 +32,15 @@ class Elementwise(nn.ModuleList):
         super(Elementwise, self).__init__(*args)
 
     def forward(self, input):
+        word_emb = input[1]
+        input = input[0]
         inputs = [feat.squeeze(2) for feat in input.split(1, dim=2)]
-        assert len(self) == len(inputs)
-        outputs = [f(x) for f, x in zip(self, inputs)]
+        if word_emb is not None:
+            assert len(self) == len(inputs) -1
+            outputs = [word_emb] + [f(x) for f, x in zip(self, inputs[1:])]
+        else:
+            assert len(self) == len(inputs)
+            outputs = [f(x) for f, x in zip(self, inputs)]
         if self.merge == 'first':
             return outputs[0]
         elif self.merge == 'concat' or self.merge == 'mlp':

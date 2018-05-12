@@ -21,6 +21,24 @@ import onmt.modules
 from onmt.Utils import use_gpu
 import onmt.opts
 
+import numpy as np
+
+
+def init_unigram_table(vcount, power=0.75, table_size=1e8):
+    words_pow = [math.pow(vcount[w], power) for w in vcount]
+    s = sum(words_pow)
+    i, d = 0, words_pow[0] / s
+    unigram_table = []
+    for a in range(int(table_size)):
+        unigram_table.append(i)
+        if float(a) / table_size > d:
+            i += 1
+            d += words_pow[i] / s
+        if i >= len(words_pow):
+            i = len(words_pow) - 1
+
+    return np.array(unigram_table)
+
 
 parser = argparse.ArgumentParser(
     description='train.py',
@@ -238,10 +256,17 @@ def train_model(model, fields, optim, data_type, model_opt):
     shard_size = opt.max_generator_batches
     norm_method = opt.normalization
     grad_accum_count = opt.accum_count
+    if opt.sense_loss_lbd > 1e-5: 
+        vcount = fields['src'].vocab.freqs
+        prior = init_unigram_table(vcount)
+    else:
+        prior = None
 
     trainer = onmt.Trainer(model, train_loss, valid_loss, optim,
                            trunc_size, shard_size, data_type,
-                           norm_method, grad_accum_count)
+                           norm_method, grad_accum_count, use_sense=(opt.num_senses > 1),
+                           window_size=opt.sense_window_size, tau=opt.tau, scale=opt.scale, 
+                           num_neg=opt.num_neg, sense_loss_lbd=opt.sense_loss_lbd)
 
     print('\nStart training...')
     print(' * number of epochs: %d, starting from Epoch %d' %
@@ -254,7 +279,7 @@ def train_model(model, fields, optim, data_type, model_opt):
         # 1. Train for one epoch on the training set.
         train_iter = make_dataset_iter(lazily_load_dataset("train"),
                                        fields, opt)
-        train_stats = trainer.train(train_iter, epoch, report_func)
+        train_stats = trainer.train(train_iter, epoch, report_func, neg_prior=prior)
         print('Train perplexity: %g' % train_stats.ppl())
         print('Train accuracy: %g' % train_stats.accuracy())
 

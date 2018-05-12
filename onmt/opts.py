@@ -16,6 +16,14 @@ def model_opts(parser):
                        help='Word embedding size for tgt.')
     group.add_argument('-word_vec_size', type=int, default=-1,
                        help='Word embedding size for src and tgt.')
+    group.add_argument('-num_senses', type=int, default=-1,
+                       help='number of senses considered per word')
+    group.add_argument('-sense_window_size', type=int, default=5,
+                       help='window size considered for senses')
+
+    group.add_argument('-num_neg', type=int, default=5,
+                       help='number of negative samples for each context-sense pair')
+
 
     group.add_argument('-share_decoder_embeddings', action='store_true',
                        help="""Use a shared weight matrix for the input and
@@ -118,6 +126,9 @@ def model_opts(parser):
                        help='Train a coverage attention layer.')
     group.add_argument('-lambda_coverage', type=float, default=1,
                        help='Lambda value for coverage.')
+
+    group.add_argument('-sense_loss_lbd', type=float, default=0.0,
+                      help='sense loss.')
 
 
 def preprocess_opts(parser):
@@ -348,6 +359,12 @@ def train_opts(parser):
                        choices=['noam'], help="Use a custom decay rate.")
     group.add_argument('-warmup_steps', type=int, default=4000,
                        help="""Number of warmup steps for custom decay.""")
+
+    # for gumbel senses
+    group.add_argument('-tau', type=float, default=0.5,
+                       help="Temperature used for Gumbel softmax")
+    group.add_argument('-scale', type=float, default=0.5,
+                       help="Scale factor used for gumbel softmax")
 
     group = parser.add_argument_group('Logging')
     group.add_argument('-report_every', type=int, default=50,

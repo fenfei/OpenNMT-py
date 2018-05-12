@@ -5,6 +5,7 @@ from collections import Counter, defaultdict, OrderedDict
 from itertools import count
 
 import torch
+from torch.autograd import Variable
 import torchtext.data
 import torchtext.vocab
 
@@ -140,6 +141,45 @@ def make_features(batch, side, data_type='text'):
         return torch.cat([level.unsqueeze(2) for level in levels], 2)
     else:
         return levels[0]
+
+
+def make_contexts(batch, window_size=5, word_padding_idx=0, data_type='text'):
+        """
+        Args:
+                batch (Variable): a batch of source or target data.
+                data_type (str): type of the source input.
+                        Options are [text|img|audio].
+        Returns:
+                A sequence of context tensors of size (len x batch).
+        """
+        #def get_context(data):
+            #"""
+            #Args:
+                    #data (Tensor): input tensor of size (len x batch).
+            #Returns:
+                    #An iterable of context tensors of size (len x batch).
+            #"""
+            #padding = [word_padding_idx] * data.size()[1]
+            #L = data.size()[0]
+            #if L
+            #for c in range(1, window_size + 1):
+                #yield torch.cat([Variable(torch.LongTensor([padding] * c).cuda()), data[:-c]], 0)
+            #for c in range(1, window_size + 1):
+                #yield torch.cat([data[c:], Variable(torch.LongTensor([padding] * c).cuda())], 0)
+
+        side = 'src'
+        if isinstance(batch.__dict__[side], tuple):
+            data = batch.__dict__[side][0]
+        else:
+            data = batch.__dict__[side]
+
+        if data_type == 'text':
+            L, B = data.size()
+            pad = [[word_padding_idx]*B]*window_size
+            pdata = torch.cat([Variable(torch.LongTensor(pad).cuda()), data, Variable(torch.LongTensor(pad).cuda())], 0).transpose(1, 0)
+            return torch.cat([pdata[:,list(range(i,i+window_size)) + list(range(i+window_size,i+2*window_size))].unsqueeze(0) for i in range(L)], 0)
+        else:
+            return data
 
 
 def collect_features(fields, side="src"):

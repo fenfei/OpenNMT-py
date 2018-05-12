@@ -18,6 +18,12 @@ import torch.nn as nn
 import onmt
 import onmt.io
 import onmt.modules
+import numpy as np
+
+
+def generate_negative_samples(prior, batch_size, num_samples):
+    inds = np.random.randint(0, len(prior), batch_size * num_samples)
+    return prior[inds].reshape((batch_size, num_samples))
 
 
 class Statistics(object):
@@ -112,7 +118,9 @@ class Trainer(object):
 
     def __init__(self, model, train_loss, valid_loss, optim,
                  trunc_size=0, shard_size=32, data_type='text',
-                 norm_method="sents", grad_accum_count=1):
+                 norm_method="sents", grad_accum_count=1, 
+                 use_sense=False, window_size=5,
+                 tau=0.5, scale=0.5, num_neg=5, sense_loss_lbd=0.0):
         # Basic attributes.
         self.model = model
         self.train_loss = train_loss
@@ -124,6 +132,15 @@ class Trainer(object):
         self.norm_method = norm_method
         self.grad_accum_count = grad_accum_count
         self.progress_step = 0
+        
+        # for using gumbel senses
+        self.use_sense = use_sense
+        self.word_padding_idx = self.model.encoder.embeddings.word_padding_idx 
+        self.tau = tau
+        self.scale = scale
+        self.sense_loss_lbd = sense_loss_lbd
+        self.num_neg = num_neg
+        self.window_size = window_size
 
         assert(grad_accum_count > 0)
         if grad_accum_count > 1:
@@ -134,7 +151,7 @@ class Trainer(object):
         # Set model in training mode.
         self.model.train()
 
-    def train(self, train_iter, epoch, report_func=None):
+    def train(self, train_iter, epoch, report_func=None, neg_prior=None):
         """ Train next epoch.
         Args:
             train_iter: training data iterator
@@ -175,7 +192,7 @@ class Trainer(object):
             if accum == self.grad_accum_count:
                 self._gradient_accumulation(
                         true_batchs, total_stats,
-                        report_stats, normalization)
+                        report_stats, normalization, neg_prior=neg_prior)
 
                 if report_func is not None:
                     report_stats = report_func(
@@ -193,7 +210,7 @@ class Trainer(object):
         if len(true_batchs) > 0:
             self._gradient_accumulation(
                     true_batchs, total_stats,
-                    report_stats, normalization)
+                    report_stats, normalization, neg_prior=None)
             true_batchs = []
 
         return total_stats
@@ -214,6 +231,8 @@ class Trainer(object):
             self.valid_loss.cur_dataset = cur_dataset
 
             src = onmt.io.make_features(batch, 'src', self.data_type)
+            if self.use_sense:
+                contexts = onmt.io.make_contexts(batch, self.window_size, self.word_padding_idx, self.data_type)
             if self.data_type == 'text':
                 _, src_lengths = batch.src
             else:
@@ -222,7 +241,11 @@ class Trainer(object):
             tgt = onmt.io.make_features(batch, 'tgt')
 
             # F-prop through the model.
-            outputs, attns, _ = self.model(src, tgt, src_lengths)
+            if self.use_sense:
+                outputs, attns, _ = self.model(src, tgt, src_lengths, contexts=contexts, 
+                                              tau=self.tau, scale=self.scale) 
+            else:
+                outputs, attns, _ = self.model(src, tgt, src_lengths)
 
             # Compute loss.
             batch_stats = self.valid_loss.monolithic_compute_loss(
@@ -273,7 +296,7 @@ class Trainer(object):
                       valid_stats.ppl(), epoch))
 
     def _gradient_accumulation(self, true_batchs, total_stats,
-                               report_stats, normalization):
+                               report_stats, normalization, neg_prior=None):
         if self.grad_accum_count > 1:
             self.model.zero_grad()
 
@@ -284,9 +307,17 @@ class Trainer(object):
                 trunc_size = self.trunc_size
             else:
                 trunc_size = target_size
-
+            neg = None
             dec_state = None
             src = onmt.io.make_features(batch, 'src', self.data_type)
+            if self.use_sense:
+                contexts = onmt.io.make_contexts(batch, window_size=5, 
+                           word_padding_idx=self.word_padding_idx, 
+                           data_type=self.data_type) 
+                if neg_prior is not None:
+                    csize = contexts.size()
+                    neg = generate_negative_samples(neg_prior, csize[0]*csize[1], csize[2]*self.num_neg)	 
+                    neg = torch.LongTensor(neg) 
             if self.data_type == 'text':
                 _, src_lengths = batch.src
                 report_stats.n_src_words += src_lengths.sum()
@@ -302,8 +333,21 @@ class Trainer(object):
                 # 2. F-prop all but generator.
                 if self.grad_accum_count == 1:
                     self.model.zero_grad()
-                outputs, attns, dec_state = \
-                    self.model(src, tgt, src_lengths, dec_state)
+                if self.use_sense:
+                    if neg is None:
+                        outputs, attns, dec_state = \
+                            self.model(src, tgt, src_lengths, dec_state,
+                                       contexts=contexts, tau=self.tau, 
+                                       scale=self.scale)
+                    else:
+                        outputs, attns, dec_state, sense_loss = \
+                            self.model(src, tgt, src_lengths, dec_state,
+                                       contexts=contexts,neg=neg,tau=self.tau, 
+                                       scale=self.scale)
+                else:
+                    outputs, attns, dec_state = \
+                        self.model(src, tgt, src_lengths, dec_state)
+
 
                 # 3. Compute loss in shards for memory efficiency.
                 batch_stats = self.train_loss.sharded_compute_loss(

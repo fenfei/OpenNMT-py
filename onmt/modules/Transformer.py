@@ -109,11 +109,13 @@ class TransformerEncoder(EncoderBase):
              for i in range(num_layers)])
         self.layer_norm = onmt.modules.LayerNorm(hidden_size)
 
-    def forward(self, input, lengths=None, hidden=None):
+    def forward(self, input, lengths=None, hidden=None, contexts=None, neg=None, tau=0.5, scale=0.5):
         """ See :obj:`EncoderBase.forward()`"""
         self._check_args(input, lengths, hidden)
-
-        emb = self.embeddings(input)
+        emb = self.embeddings(input, contexts=contexts, neg=neg, tau=tau, scale=scale)
+        if neg is not None:
+            sense_loss = emb[1]
+            emb = emb[0]
         s_len, n_batch, emb_dim = emb.size()
 
         out = emb.transpose(0, 1).contiguous()
@@ -133,8 +135,10 @@ class TransformerEncoder(EncoderBase):
         for i in range(self.num_layers):
             out = self.transformer[i](out, mask)
         out = self.layer_norm(out)
-
-        return Variable(emb.data), out.transpose(0, 1).contiguous()
+        if neg is None:
+            return Variable(emb.data), out.transpose(0, 1).contiguous()
+        else:
+            return Variable(emb.data), out.transpose(0, 1).contiguous(), sense_loss
 
 
 class TransformerDecoderLayer(nn.Module):

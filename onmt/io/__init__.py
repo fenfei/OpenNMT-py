@@ -1,4 +1,5 @@
 from onmt.io.IO import collect_feature_vocabs, make_features, \
+                       make_contexts, \
                        collect_features, get_num_features, \
                        load_fields_from_vocab, get_fields, \
                        save_fields_to_vocab, build_dataset, \
