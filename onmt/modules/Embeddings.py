@@ -82,7 +82,8 @@ class WeightedSenseEmbedding(nn.Module):
         super(WeightedSenseEmbedding, self).__init__()
         self.d_word = d_word
         self.num_senses = num_senses
-        self.SenseEmb = FlatTensorEmbedding(word_vocab_size=word_vocab_size, num_senses=num_senses, d_word=d_word, u=u)
+        self.SenseEmb = FlatTensorEmbedding(word_vocab_size=word_vocab_size, num_senses=num_senses,,
+                                            d_word=d_word, u=u, padding_idx=padding_idx)
         self.ContextEmb = FlatTensorEmbedding(word_vocab_size, 1, d_word=d_word, u=u, padding_idx=padding_idx)
         self.SenseAttention = GumbelSenseAttention(cuda=cuda)
 
