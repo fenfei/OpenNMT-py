@@ -416,6 +416,17 @@ def translate_opts(parser):
     group.add_argument('-report_rouge', action='store_true',
                        help="""Report rouge 1/2/3/L/SU4 score after translation
                        call tools/test_rouge.py on command line""")
+    # for gumbel senses
+    group.add_argument('-tau', type=float, default=0.5,
+                       help="Temperature used for Gumbel softmax")
+    group.add_argument('-scale', type=float, default=0.5,
+                       help="Scale factor used for gumbel softmax")
+
+    group.add_argument('-num_senses', type=int, default=-1,
+                       help='number of senses considered per word')
+    group.add_argument('-sense_window_size', type=int, default=5,
+                       help='window size considered for senses')
+
 
     # Options most relevant to summarization.
     group.add_argument('-dynamic_dict', action='store_true',
