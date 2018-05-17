@@ -36,7 +36,8 @@ def make_translator(opt, report_score=True, out_file=None):
               for k in ["beam_size", "n_best", "max_length", "min_length",
                         "stepwise_penalty", "block_ngram_repeat",
                         "ignore_when_blocking", "dump_beam",
-                        "data_type", "replace_unk", "gpu", "verbose"]}
+                        "data_type", "replace_unk", "gpu", "verbose", "num_senses",
+                        "sense_window_size", "tau", "scale", ""]}
 
     translator = Translator(model, fields, global_scorer=scorer,
                             out_file=out_file, report_score=report_score,
@@ -75,6 +76,7 @@ class Translator(object):
                  dump_beam="",
                  min_length=0,
                  stepwise_penalty=False,
+                 
                  block_ngram_repeat=0,
                  ignore_when_blocking=[],
                  sample_rate='16000',
@@ -88,11 +90,18 @@ class Translator(object):
                  report_bleu=False,
                  report_rouge=False,
                  verbose=False,
-                 out_file=None):
+                 out_file=None,
+                 num_senses=False,
+                 sense_window_size=5, tau=1.0, scale=0.0):
         self.gpu = gpu
         self.cuda = gpu > -1
 
+        self.use_sense = (num_senses > 1) 
+        self.window_size = sense_window_size
+        self.tau = tau
+        self.scale = scale
         self.model = model
+        self.word_padding_idx = self.model.encoder.embeddings.word_padding_idx
         self.fields = fields
         self.n_best = n_best
         self.max_length = max_length
@@ -263,11 +272,18 @@ class Translator(object):
 
         # (1) Run the encoder on the src.
         src = onmt.io.make_features(batch, 'src', data_type)
+        if self.use_sense:
+            contexts = onmt.io.make_contexts(batch, self.window_size, self.word_padding_idx, data_type)
         src_lengths = None
         if data_type == 'text':
             _, src_lengths = batch.src
 
-        enc_states, memory_bank = self.model.encoder(src, src_lengths)
+        if self.use_sense:
+            enc_states, memory_bank = self.model.encoder(src, src_lengths, contexts=contexts, 
+                                                         tau=self.tau, scale=self.scale)
+        else:
+            enc_states, memory_bank = self.model.encoder(src, src_lengths)
+
         dec_states = self.model.decoder.init_decoder_state(
             src, memory_bank, enc_states)
 
@@ -365,9 +381,13 @@ class Translator(object):
             src_lengths = None
         src = onmt.io.make_features(batch, 'src', data_type)
         tgt_in = onmt.io.make_features(batch, 'tgt')[:-1]
-
-        #  (1) run the encoder on the src
-        enc_states, memory_bank = self.model.encoder(src, src_lengths)
+        if self.use_sense:
+            contexts = onmt.io.make_contexts(batch, self.window_size, self.word_padding_idx, data_type)
+            enc_states, memory_bank = self.model.encoder(src, src_lengths, contexts=contexts, 
+                                                         tau=self.tau, scale=self.scale)
+        else:
+            #  (1) run the encoder on the src
+            enc_states, memory_bank = self.model.encoder(src, src_lengths)
         dec_states = \
             self.model.decoder.init_decoder_state(src, memory_bank, enc_states)
 

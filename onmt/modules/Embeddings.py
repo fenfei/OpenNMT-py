@@ -69,10 +69,11 @@ class FlatTensorEmbedding(nn.Embedding):
         self.num_senses = num_senses
         self.d_word = d_word
         self.u = u
-        super(FlatTensorEmbedding, self).__init__(word_vocab_size, num_senses*d_word, padding_idx=padding_idx, sparse=sparse)
+        super(FlatTensorEmbedding, self).__init__(word_vocab_size, num_senses*d_word, padding_idx=padding_idx, sparse=False)
 
     def reset_parameters(self):
         self.weight.data.uniform_(-self.u/self.d_word, self.u/self.d_word)
+        print("having padding_idx {}".format(self.padding_idx))
         if self.padding_idx is not None:
             self.weight.data[self.padding_idx].fill_(0)
 
@@ -82,7 +83,7 @@ class WeightedSenseEmbedding(nn.Module):
         super(WeightedSenseEmbedding, self).__init__()
         self.d_word = d_word
         self.num_senses = num_senses
-        self.SenseEmb = FlatTensorEmbedding(word_vocab_size=word_vocab_size, num_senses=num_senses,,
+        self.SenseEmb = FlatTensorEmbedding(word_vocab_size=word_vocab_size, num_senses=num_senses,
                                             d_word=d_word, u=u, padding_idx=padding_idx)
         self.ContextEmb = FlatTensorEmbedding(word_vocab_size, 1, d_word=d_word, u=u, padding_idx=padding_idx)
         self.SenseAttention = GumbelSenseAttention(cuda=cuda)
