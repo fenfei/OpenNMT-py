@@ -37,7 +37,7 @@ def make_translator(opt, report_score=True, out_file=None):
                         "stepwise_penalty", "block_ngram_repeat",
                         "ignore_when_blocking", "dump_beam",
                         "data_type", "replace_unk", "gpu", "verbose", "num_senses",
-                        "sense_window_size", "tau", "scale", ""]}
+                        "sense_window_size", "tau", "scale"]}
 
     translator = Translator(model, fields, global_scorer=scorer,
                             out_file=out_file, report_score=report_score,
@@ -97,7 +97,7 @@ class Translator(object):
         self.cuda = gpu > -1
 
         self.use_sense = (num_senses > 1) 
-        self.window_size = sense_window_size
+        self.sense_window_size = sense_window_size
         self.tau = tau
         self.scale = scale
         self.model = model
@@ -273,7 +273,7 @@ class Translator(object):
         # (1) Run the encoder on the src.
         src = onmt.io.make_features(batch, 'src', data_type)
         if self.use_sense:
-            contexts = onmt.io.make_contexts(batch, self.window_size, self.word_padding_idx, data_type)
+            contexts = onmt.io.make_contexts(batch, self.sense_window_size, self.word_padding_idx, data_type)
         src_lengths = None
         if data_type == 'text':
             _, src_lengths = batch.src
@@ -382,7 +382,7 @@ class Translator(object):
         src = onmt.io.make_features(batch, 'src', data_type)
         tgt_in = onmt.io.make_features(batch, 'tgt')[:-1]
         if self.use_sense:
-            contexts = onmt.io.make_contexts(batch, self.window_size, self.word_padding_idx, data_type)
+            contexts = onmt.io.make_contexts(batch, self.sense_window_size, self.word_padding_idx, data_type)
             enc_states, memory_bank = self.model.encoder(src, src_lengths, contexts=contexts, 
                                                          tau=self.tau, scale=self.scale)
         else:

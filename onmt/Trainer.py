@@ -14,6 +14,7 @@ import sys
 import math
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 
 import onmt
 import onmt.io
@@ -317,7 +318,7 @@ class Trainer(object):
                 if neg_prior is not None:
                     csize = contexts.size()
                     neg = generate_negative_samples(neg_prior, csize[0]*csize[1], csize[2]*self.num_neg)	 
-                    neg = torch.LongTensor(neg) 
+                    neg = Variable(torch.LongTensor(neg).cuda()) 
             if self.data_type == 'text':
                 _, src_lengths = batch.src
                 report_stats.n_src_words += src_lengths.sum()
@@ -350,6 +351,9 @@ class Trainer(object):
 
 
                 # 3. Compute loss in shards for memory efficiency.
+                if self.use_sense and neg is not None:
+                    sense_loss.div(normalization/self.sense_loss_lbd).backward(retain_graph=True)
+
                 batch_stats = self.train_loss.sharded_compute_loss(
                         batch, outputs, attns, j,
                         trunc_size, self.shard_size, normalization)

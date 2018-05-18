@@ -7,6 +7,7 @@ import glob
 import os
 import sys
 import random
+import math
 from datetime import datetime
 
 import torch
@@ -259,6 +260,7 @@ def train_model(model, fields, optim, data_type, model_opt):
     if opt.sense_loss_lbd > 1e-5: 
         vcount = fields['src'].vocab.freqs
         prior = init_unigram_table(vcount)
+        print("Done generating negative sampling prior")
     else:
         prior = None
 
